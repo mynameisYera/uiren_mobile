@@ -10,7 +10,7 @@ import 'package:uiren/src/core/colors/colors.dart';
 import 'package:uiren/src/core/service/injectable/injectable_service.dart';
 import 'package:uiren/src/core/utils/firebase_utils.dart';
 import 'package:uiren/src/core/utils/formatters/kazakh_phone_formatter.dart';
-import 'package:uiren/src/core/utils/loggers/logger.dart';
+import 'package:uiren/src/core/utils/helpers/phone_helper.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uiren/src/core/widgets/custom_text_field.dart';
 import 'package:uiren/src/features/auth/presentation/bloc/auth_bloc.dart';
@@ -25,11 +25,12 @@ class LogInPage extends StatefulWidget {
 }
 
 class LogInPageState extends State<LogInPage> {
-  final phoneOrEmailController = TextEditingController();
+  final phoneOrEmailController = TextEditingController(text: '+7 ');
   final passwordController = TextEditingController();
   late final AuthBloc _authBloc;
   String _identifierError = '';
   String _passwordError = '';
+
   @override
   void dispose() {
     phoneOrEmailController.dispose();
@@ -44,21 +45,26 @@ class LogInPageState extends State<LogInPage> {
   }
 
   bool _validateFields() {
-    final identifier = phoneOrEmailController.text.trim();
-    final password = passwordController.text;
+    var isValid = true;
 
-    setState(() {
-      _identifierError =
-          identifier.isEmpty ? 'Поле не может быть пустым' : '';
-      _passwordError = password.isEmpty
-          ? 'Поле не может быть пустым'
-          : password.length < 8
-              ? 'Пароль должен быть не менее 8 символов'
-              : '';
-    });
+    if (!isPhoneComplete(phoneOrEmailController.text)) {
+      _identifierError = context.tr(LocaleKeys.invalid_phone);
+      isValid = false;
+    } else {
+      _identifierError = '';
+    }
 
-    return _identifierError.isEmpty && _passwordError.isEmpty;
+    if (passwordController.text.isEmpty) {
+      _passwordError = context.tr(LocaleKeys.password_required);
+      isValid = false;
+    } else {
+      _passwordError = '';
+    }
+
+    setState(() {});
+    return isValid;
   }
+
   @override
   void initState() {
     _authBloc = getIt<AuthBloc>();
@@ -70,121 +76,90 @@ class LogInPageState extends State<LogInPage> {
   Widget build(BuildContext context) {
     return BaseBlocWidget<AuthBloc, AuthEvent, AuthState>(
       bloc: _authBloc,
-      listener: (context, state) {
-        state.maybeWhen(
-          loaded: () {
-            Log.i('LOGIN');
-          },
-          orElse: () {},
-        );
-      },
       builder: (context, state, bloc) {
         final locale = context.locale;
+        final isLoading = state.maybeWhen(loading: () => true, orElse: () => false);
 
         return Scaffold(
           key: ValueKey(locale.languageCode),
           backgroundColor: AppColors.white,
           resizeToAvoidBottomInset: false,
-          body: state.maybeWhen(
-            loading: () => Center(
-              child: CircularProgressIndicator(),
-            ),
-            orElse: () {
-              return SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(30),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Gap(20),
-                        LanguageChangerWidget(),
-                        Gap(30),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 20), 
-                          child: Assets.images.group330.image(),
-                        ),
-                        const SizedBox(height: 100),
-                        AppTextField(
-                          labelText: context.tr(LocaleKeys.phone_label),
-                          inputFormatters: [KazakhPhoneNumberFormatter()],
-                          controller: phoneOrEmailController,
-                          prefixIcon: Icons.phone_outlined,
-                          errorText: _identifierError,
-                          onChanged: (_) {
-                            if (_identifierError.isNotEmpty) {
-                              setState(() {
-                                _identifierError = '';
-                              });
-                            }
-                          },
-                        ),
-                        Gap(10),
-                        AppTextField(
-                          labelText: context.tr(LocaleKeys.password_label),
-                          prefixIcon: Icons.lock_outline,
-                          errorText: _passwordError,
-                          obscureText: true,
-                          controller: passwordController,
-                          onChanged: (_) {
-                            if (_passwordError.isNotEmpty) {
-                              setState(() {
-                                _passwordError = '';
-                              });
-                            }
-                          },
-                        ),
-                        const Spacer(),
-                        CustomButton(
-                          color: AppColors.mainColor,
-                          text: context.tr(LocaleKeys.log_in),
-                          textColor: AppColors.white,
-                          // onPressed: () {
-                          //   if (_validateFields()) {
-                          //     _authBloc.add(
-                          //       AuthEvent.doLogin(
-                          //         password: passwordController.text,
-                          //         identifier: phoneOrEmailController.text,
-                          //         onSuccess: () {
-                          //           context.go(RoutePaths.home);
-                          //         },
-                          //       ),
-                          //     );
-                          //   }
-                          // },
-                          onPressed: (){
-                            context.go(RoutePaths.home);
-                          },
-                        ),
-                        const Gap(8),
-                        TextButton(
-                          onPressed: () => context.push(RoutePaths.register),
-                          child: Text(
-                            context.tr(LocaleKeys.no_account),
-                            style: TextStyles.medium(AppColors.mainColor, fontSize: 14),
-                          ),
-                        ),
-                        const Gap(10),
-                        state.maybeWhen(
-                          loadingFailure: () {
-                            return Row(
-                              children: [
-                                Icon(Icons.error, color: AppColors.red),
-                                Text(
-                                  'Что то пошло не так',
-                                  style: TextStyles.regular(AppColors.red),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(30),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Gap(20),
+                  const LanguageChangerWidget(),
+                  const Gap(30),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Assets.images.group330.image(),
+                  ),
+                  const SizedBox(height: 100),
+                  AppTextField(
+                    labelText: context.tr(LocaleKeys.phone_label),
+                    inputFormatters: [KazakhPhoneNumberFormatter()],
+                    controller: phoneOrEmailController,
+                    prefixIcon: Icons.phone_outlined,
+                    errorText: _identifierError,
+                    enabled: !isLoading,
+                    onChanged: (_) {
+                      if (_identifierError.isNotEmpty) {
+                        setState(() => _identifierError = '');
+                      }
+                    },
+                  ),
+                  const Gap(10),
+                  AppTextField(
+                    labelText: context.tr(LocaleKeys.password_label),
+                    prefixIcon: Icons.lock_outline,
+                    errorText: _passwordError,
+                    obscureText: true,
+                    controller: passwordController,
+                    enabled: !isLoading,
+                    onChanged: (_) {
+                      if (_passwordError.isNotEmpty) {
+                        setState(() => _passwordError = '');
+                      }
+                    },
+                  ),
+                  const Spacer(),
+                  CustomButton(
+                    color: AppColors.mainColor,
+                    text: context.tr(LocaleKeys.log_in),
+                    textColor: AppColors.white,
+                    isLoading: isLoading,
+                    onPressed: () {
+                            if (_validateFields()) {
+                              _authBloc.add(
+                                AuthEvent.doLogin(
+                                  password: passwordController.text,
+                                  identifier: formatPhoneForApi(
+                                    phoneOrEmailController.text,
+                                  ),
+                                  onSuccess: () {
+                                    context.go(RoutePaths.home);
+                                  },
                                 ),
-                              ],
-                            );
+                              );
+                            }
                           },
-                          orElse: () {
-                            return const SizedBox.shrink();
-                          },
-                        ),
-                      ],
+                  ),
+                  const Gap(8),
+                  TextButton(
+                    onPressed: isLoading
+                        ? null
+                        : () => context.push(RoutePaths.register),
+                    child: Text(
+                      context.tr(LocaleKeys.no_account),
+                      style: TextStyles.medium(AppColors.mainColor, fontSize: 14),
                     ),
-                ),
-              );
-            },
+                  ),
+                ],
+              ),
+            ),
           ),
         );
       },

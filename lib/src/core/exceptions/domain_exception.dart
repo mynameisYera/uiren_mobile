@@ -40,3 +40,13 @@ class MapperException extends DomainException {
 class NetworkException extends DomainException {
   NetworkException({required super.message, super.stackTrace});
 }
+
+class AuthApiException extends DomainException {
+  AuthApiException({
+    required super.message,
+    this.errorCode,
+    super.stackTrace,
+  });
+
+  final String? errorCode;
+}

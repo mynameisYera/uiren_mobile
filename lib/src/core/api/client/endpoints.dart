@@ -1,11 +1,12 @@
 class EndPoints {
-  static const String baseUrl = 'http://0.0.0.0:8000/api';
+  static const String baseUrl = 'https://uiren-backend.onrender.com/api';
 
   // Refresh token
   static const String refreshToken = '/auth/refresh';
 
   // Register
   static const String registerRequestOtp = '/auth/register/request-otp';
+  static const String registerVerifyOtp = '/auth/register/verify-otp';
   static const String register = '/auth/register/complete';
 
   // password reset

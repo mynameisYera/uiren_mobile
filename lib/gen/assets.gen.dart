@@ -11,6 +11,16 @@
 
 import 'package:flutter/widgets.dart';
 
+class $AssetsDataGen {
+  const $AssetsDataGen();
+
+  /// File path: assets/data/university_data.json
+  String get universityData => 'assets/data/university_data.json';
+
+  /// List of all assets
+  List<String> get values => [universityData];
+}
+
 class $AssetsImagesGen {
   const $AssetsImagesGen();
 
@@ -22,10 +32,25 @@ class $AssetsImagesGen {
   List<AssetGenImage> get values => [group330];
 }
 
+class $AssetsTranslationsGen {
+  const $AssetsTranslationsGen();
+
+  /// File path: assets/translations/kk.json
+  String get kk => 'assets/translations/kk.json';
+
+  /// File path: assets/translations/ru.json
+  String get ru => 'assets/translations/ru.json';
+
+  /// List of all assets
+  List<String> get values => [kk, ru];
+}
+
 class Assets {
   const Assets._();
 
+  static const $AssetsDataGen data = $AssetsDataGen();
   static const $AssetsImagesGen images = $AssetsImagesGen();
+  static const $AssetsTranslationsGen translations = $AssetsTranslationsGen();
 }
 
 class AssetGenImage {

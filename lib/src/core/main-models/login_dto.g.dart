@@ -6,18 +6,6 @@ part of 'login_dto.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
-// LoginDto _$LoginDtoFromJson(Map<String, dynamic> json) => LoginDto(
-//   refresh_token: json['refresh_token'] as String,
-//   access_token: json['access_token'] as String,
-//   token_type: json['token_type'] as String,
-// );
-
-// Map<String, dynamic> _$LoginDtoToJson(LoginDto instance) => <String, dynamic>{
-//   'refresh_token': instance.refresh_token,
-//   'access_token': instance.access_token,
-//   'token_type': instance.token_type,
-// };
-
 _$LoginDtoImpl _$$LoginDtoImplFromJson(Map<String, dynamic> json) =>
     _$LoginDtoImpl(
       refresh_token: json['refresh_token'] as String,

@@ -20,7 +20,13 @@ import '../../../features/auth/data/repositories/auth_repository_impl.dart'
     as _i365;
 import '../../../features/auth/domain/repository/i_auth_repository.dart'
     as _i1024;
+import '../../../features/auth/domain/usecases/complete_registration_usecase.dart'
+    as _i1002;
 import '../../../features/auth/domain/usecases/login_usecase.dart' as _i849;
+import '../../../features/auth/domain/usecases/request_otp_usecase.dart'
+    as _i804;
+import '../../../features/auth/domain/usecases/verify_otp_usecase.dart'
+    as _i553;
 import '../../utils/picker/file_picker.dart' as _i716;
 
 extension GetItInjectableX on _i174.GetIt {
@@ -43,6 +49,21 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i849.LoginUseCase>(
       () => _i849.LoginUseCase(
+        gh<_i1024.IAuthRepo>(instanceName: 'AuthRepoImpl'),
+      ),
+    );
+    gh.lazySingleton<_i804.RequestOtpUseCase>(
+      () => _i804.RequestOtpUseCase(
+        gh<_i1024.IAuthRepo>(instanceName: 'AuthRepoImpl'),
+      ),
+    );
+    gh.lazySingleton<_i1002.CompleteRegistrationUseCase>(
+      () => _i1002.CompleteRegistrationUseCase(
+        gh<_i1024.IAuthRepo>(instanceName: 'AuthRepoImpl'),
+      ),
+    );
+    gh.lazySingleton<_i553.VerifyOtpUseCase>(
+      () => _i553.VerifyOtpUseCase(
         gh<_i1024.IAuthRepo>(instanceName: 'AuthRepoImpl'),
       ),
     );

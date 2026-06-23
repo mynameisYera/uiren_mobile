@@ -5,7 +5,6 @@ import 'package:uiren/src/core/base/base_models/base_dto.dart';
 part 'login_dto.freezed.dart';
 part 'login_dto.g.dart';
 
-@JsonSerializable(fieldRename: FieldRename.snake)
 @freezed
 class LoginDto extends BaseDto with _$LoginDto {
   const factory LoginDto({

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:talker_dio_logger/talker_dio_logger.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import 'package:uiren/src/core/api/client/endpoints.dart';
+import 'package:uiren/src/core/api/client/rest/dio/dio_error_message.dart';
 import 'package:uiren/src/core/router/router_navigation.dart';
 import 'package:uiren/src/core/service/injectable/injectable_service.dart';
 import 'package:uiren/src/core/service/storage/storage_service_impl.dart';
@@ -37,13 +38,17 @@ class DioInterceptor {
           options.headers['Accept-Language'] =
               _storageService.getLanguageCode() ?? 'ru';
 
-          if (accessToken != null) {
+          if (accessToken != null &&
+              !DioErrorPresenter.isPublicAuthRequest(options.uri.path)) {
             options.headers['Authorization'] = 'JWT $accessToken';
           }
           return handler.next(options);
         },
         onError: (DioException error, handler) async {
-          if (error.requestOptions.path == EndPoints.refreshToken) {
+          if (DioErrorPresenter.isRefreshRequest(error.requestOptions.uri.path)) {
+            DioErrorPresenter.showMessage(
+              DioErrorPresenter.resolveMessage(error),
+            );
             await _clearTokensAndRedirectToAuth();
             return handler.next(error);
           }
@@ -57,13 +62,18 @@ class DioInterceptor {
               }
               context.push('/login');
             }
+            DioErrorPresenter.show(error);
+            return handler.next(error);
           }
 
           if (_isAuthError(error.response?.statusCode)) {
             try {
-              if (_isUserNotExistError(
-                  error.response?.statusCode, error.response?.data["detail"])) {
-                handleUserNotExist();
+              final path = error.requestOptions.uri.path;
+
+              if (DioErrorPresenter.isLoginRequest(path) ||
+                  DioErrorPresenter.isPublicAuthRequest(path)) {
+                DioErrorPresenter.show(error);
+                return handler.next(error);
               }
 
               if (!_isRefreshing) {
@@ -92,6 +102,10 @@ class DioInterceptor {
               return _handleAuthError(error, handler);
             }
           }
+
+          if (!DioErrorPresenter.shouldSkipFlash(error)) {
+            DioErrorPresenter.show(error);
+          }
           return handler.next(error);
         },
       ),
@@ -117,26 +131,18 @@ class DioInterceptor {
 
   bool _isAuthError(int? statusCode) => statusCode == 401;
 
-  bool _isUserNotExistError(int? statusCode, String? message) =>
-      statusCode == 401 &&
-      message == "No active account found with the given credentials";
-
-  handleUserNotExist() {
-    BuildContext? context = rootNavigatorKey.currentContext;
-    ScaffoldMessenger.of(context!).showSnackBar(
-      SnackBar(
-        content: Text(
-            "Активная учетная запись с указанными учетными данными не найдена."),
-      ),
-    );
-  }
-
   Future<void> _handleAuthError(
     DioException error,
     ErrorInterceptorHandler handler,
   ) async {
     log('Authentication error occurred');
-    await _clearTokensAndRedirectToAuth();
+    DioErrorPresenter.show(error);
+
+    final path = error.requestOptions.uri.path;
+    if (!DioErrorPresenter.isPublicAuthRequest(path)) {
+      await _clearTokensAndRedirectToAuth();
+    }
+
     return handler.next(error);
   }
 
@@ -166,7 +172,7 @@ class DioInterceptor {
       }
 
       final response = await refreshDio.post(EndPoints.refreshToken,
-          data: {'refreshToken': refreshToken},
+          data: {'refresh_token': refreshToken},
           options: Options(headers: {
             'Accept': 'application/json',
             'User-Agent': Platform.isAndroid ? 'Android' : 'IOS',

@@ -44,7 +44,7 @@ class AuthBloc extends BaseBloc<AuthEvent, AuthState> {
       emit(const AuthState.success());
       event.onSuccess();
     } else {
-      emit(const AuthState.loadingFailure());
+      emit(const AuthState.initial());
     }
   }
 
