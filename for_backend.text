@@ -1,0 +1,686 @@
+# UIREN — полная инструкция для разработки Backend API
+
+> Этот документ — промпт/ТЗ для ИИ или разработчика бэкенда.  
+> Мобильное приложение: **Flutter** (проект `uiren`).  
+> Базовый URL в клиенте уже задан: `http://0.0.0.0:8000/api` (см. `lib/src/core/api/client/endpoints.dart`).
+
+---
+
+## 1. О проекте
+
+**UIREN** — мобильное приложение для школьников Казахстана: подготовка к **ЕНТ/ҰБТ** (ОЖСБ, ҰБТ/КТА, БЖБ/ТЖБ), ежедневные тесты, **баттлы** с одноклассниками, прогресс, выбор **топ-3 ЖОО** по профильным предметам.
+
+### ⚠️ Область этого API — только оқушы (`student`)
+
+Этот backend обслуживает **только мобильное Flutter-приложение для учеников**.
+
+| Кто | Где |
+|-----|-----|
+| **Оқушы (student)** | Мобильное приложение UIREN → **этот API** |
+| **Ұстаз (teacher)** | Отдельный **веб-сайт** (другой проект / другой API) |
+| **Ата-ана (parent)** | Отдельный **веб-сайт** или только SMS (без входа в мобильное приложение) |
+| **Админ** | Отдельный **веб-сайт** / admin panel (другой API) |
+
+**Не делай в этом API:**
+- эндпоинты логина/регистрации для teacher, parent, admin;
+- RBAC с переключением ролей;
+- кабинет учителя, модерацию контента, CRUD вопросов через мобильный клиент.
+
+**Делай в этом API:**
+- регистрация/логин **только student** (телефон + пароль + OTP);
+- все фичи из мобильного UI: тесты, баттл, прогресс, ЖОО, уведомления оқушы.
+
+Контент (вопросы, шаблоны тестов на повторение, назначения от ұстаз) создаётся **через admin/teacher веб** и попадает к оқушы через обычные student-эндпоинты (`GET /repeat-tests/daily`, `GET /tests/templates`).
+
+### Роль в БД
+
+В таблице `users` поле `role` **всегда** `'student'` (или колонку `role` не включать — считать всех пользователей этого API учениками).
+
+### Языки
+
+- Ответы API: JSON, поля на **русском** для учебных предметов (как в ЕНТ), UI локализован **kk/ru**.
+- Клиент шлёт заголовок: `Accept-Language: kk` или `ru`.
+
+---
+
+## 2. Рекомендуемый стек (выбери один и придерживайся)
+
+**Вариант A (рекомендуется для скорости):**
+- **Python 3.12+**, **FastAPI**, **SQLAlchemy 2**, **Alembic**
+- **PostgreSQL 16**
+- **Redis** — кэш, OTP, очереди, online-status баттла
+- **Celery** + Redis — SMS родителю (по `parent_phone` оқушы, без аккаунта parent в этом API)
+- **Firebase Admin** (опционально) — push вместе с FCM token из приложения
+
+**Вариант B:**
+- **Node.js**, **NestJS**, **Prisma**, PostgreSQL, Redis, BullMQ
+
+**Общее:**
+- JWT access + refresh (как ожидает Flutter-клиент)
+- OpenAPI/Swagger (`/docs`)
+- Docker Compose для локальной разработки
+- `.env` для секретов (не коммитить)
+
+---
+
+## 3. Архитектура
+
+```
+api/
+├── app/
+│   ├── main.py
+│   ├── core/           # config, security, deps, exceptions
+│   ├── models/         # SQLAlchemy ORM
+│   ├── schemas/        # Pydantic request/response
+│   ├── api/v1/
+│   │   ├── auth.py
+│   │   ├── users.py
+│   │   ├── tests.py
+│   │   ├── battles.py
+│   │   ├── progress.py
+│   │   ├── universities.py
+│   │   ├── notifications.py
+│   │   └── daily_tasks.py
+│   ├── services/       # бизнес-логика
+│   └── tasks/          # Celery: SMS, push, daily reminders
+├── alembic/
+├── tests/
+├── seed/               # university_data.json, demo questions
+└── docker-compose.yml
+```
+
+Принципы:
+- **REST** для CRUD и сессий тестов
+- **WebSocket** (опционально, фаза 2) для live-баттла: `/ws/battles/{battle_id}`
+- Единый формат ошибок (см. §12)
+- Все защищённые эндпоинты — `Authorization: JWT <access_token>` (именно префикс `JWT`, как в Flutter `dio_client.dart`)
+
+---
+
+## 4. Модель данных (PostgreSQL)
+
+### 4.1 Пользователи и авторизация
+
+```sql
+-- users
+id              UUID PK
+phone           VARCHAR(20) UNIQUE NOT NULL   -- +77001234567
+password_hash   VARCHAR NOT NULL
+first_name      VARCHAR(100)
+last_name       VARCHAR(100)
+-- role не нужен: все users этого API = student (teacher/admin — другой сервис)
+class_grade     SMALLINT NULL                  -- класс, напр. 11
+class_letter    VARCHAR(5) NULL                -- "А", "Б"
+school_id       UUID FK schools NULL
+avatar_url      VARCHAR NULL
+locale          VARCHAR(5) DEFAULT 'kk'        -- kk | ru
+fcm_token       VARCHAR NULL
+parent_phone    VARCHAR(20) NULL               -- SMS ата-ане после ЕНТ (ата-ана не логинится в app)
+is_active       BOOLEAN DEFAULT true
+created_at      TIMESTAMPTZ
+updated_at      TIMESTAMPTZ
+
+-- schools
+id, name, city, ...
+
+-- otp_codes (регистрация / сброс пароля)
+id, phone, code_hash, purpose ENUM('register','reset_password'),
+expires_at, attempts, created_at
+
+-- refresh_tokens
+id, user_id FK, token_hash, expires_at, revoked_at, device_id
+```
+
+### 4.2 Предметы и профиль ЕНТ
+
+```sql
+-- subjects (справочник)
+id, code, name_ru, name_kk, is_profile BOOLEAN
+
+-- Примеры: Математика, Физика, Биология, Химия, Информатика,
+-- Всемирная история, Основы права, Иностранный язык, География,
+-- Творческий экзамен, Английский язык
+
+-- student_profile_subjects (2 профильных предмета оқушы)
+user_id, subject_1_id, subject_2_id, updated_at
+UNIQUE(user_id)
+```
+
+### 4.3 Университеты (из `assets/data/university_data.json`)
+
+```sql
+universities
+  id, name, city, type, threshold_score, note TEXT NULL
+
+university_programs
+  id, university_id FK, field_of_study, required_subject_1_id,
+  required_subject_2_id  -- или JSON array required_subjects для сложных случаев
+
+student_target_universities  -- топ-3 цели
+  user_id, university_id, rank SMALLINT (1..3)
+  UNIQUE(user_id, university_id)
+```
+
+Сид при старте: загрузить JSON из репозитория Flutter (`university_data.json`).
+
+**Фильтр ЖОО по предметам (логика как в приложении):**
+- Оқушы выбирает `subject_1` и `subject_2`
+- Вернуть программы, где пара `required_subjects` совпадает (порядок не важен)
+- Для значений вида `"Физика / Химия"` — совпадение по любой части после `/`
+
+### 4.4 Вопросы и тесты
+
+```sql
+-- question_bank
+id, subject_id, exam_type ENUM('ent','ozsb','ubt','bjb'),  -- ОЖСБ/ҰБТ/БЖБ
+difficulty SMALLINT,  -- 1-5
+text_ru, text_kk,
+options JSONB,        -- [{ "id": "a", "text_ru": "...", "is_correct": true }]
+explanation_ru NULL,
+source ENUM('system','import','ai') DEFAULT 'import',
+-- created_by: NULL или ID из admin-web (внешний UUID, без FK на teacher в mobile API)
+external_author_id VARCHAR NULL
+
+-- test_templates (шаблон: ЕНТ полный, повторение 20 вопросов, баттл 10 вопросов)
+id, title, exam_type, subject_id NULL,
+question_count, duration_seconds, is_anti_cheat BOOLEAN,
+external_author_id VARCHAR NULL  -- ұстаз из веб-сайта (опционально)
+
+test_template_questions
+  template_id, question_id, sort_order
+
+-- test_sessions (попытка прохождения)
+id, user_id, template_id,
+type ENUM('ent','repeat','battle','daily'),
+status ENUM('in_progress','completed','abandoned','blocked'),
+started_at, finished_at,
+score INT NULL,           -- итоговый балл ЕНТ-шкалы (0-140)
+correct_count INT NULL,
+anti_cheat_flags JSONB,   -- { "tab_switch": 2, "too_fast_answers": 1 }
+battle_id UUID NULL
+
+test_session_answers
+  session_id, question_id, selected_option_id,
+  answered_at, time_spent_ms INT
+```
+
+### 4.5 Баттл
+
+```sql
+battles
+  id, subject_id,
+  status ENUM('waiting','active','finished','cancelled'),
+  duration_seconds INT,
+  question_count INT,
+  created_at, started_at, finished_at
+
+battle_participants
+  battle_id, user_id,
+  score INT, correct_count INT,
+  is_winner BOOLEAN,
+  joined_at
+
+-- matchmaking: искать online student того же class_grade/school
+```
+
+### 4.6 Прогресс и стрики
+
+```sql
+student_stats
+  user_id PK,
+  avg_score NUMERIC(5,2),
+  best_score INT,
+  total_tests INT,
+  battle_wins INT,
+  current_streak_days INT,
+  longest_streak_days INT,
+  last_test_at TIMESTAMPTZ,
+  ent_readiness_percent SMALLINT  -- 0-100, расчётный
+
+-- для графика fl_chart на клиенте
+test_score_history  -- денормализация или VIEW
+  user_id, session_id, score, test_type, label, completed_at
+```
+
+### 4.7 Уведомления
+
+```sql
+notifications
+  id, user_id,
+  type ENUM('motivation','daily_test','battle_invite'),  -- только push оқушы
+  title, body, payload JSONB, read_at, created_at
+  -- SMS ата-ане после ЕНТ: отдельная таблица sms_log или Celery task, не notification в app
+
+daily_tasks
+  id, user_id, date, template_id,
+  status ENUM('pending','completed','skipped'),
+  completed_session_id UUID NULL
+```
+
+---
+
+## 5. API Endpoints (v1)
+
+Префикс: `/api`  
+Формат успеха: `{ "data": ... }` или прямой объект — **согласовать с Flutter** (сейчас клиент читает `response.data` напрямую для login).
+
+### 5.1 Auth — уже ожидается клиентом
+
+> Только **student**. `POST /auth/register/complete` и `POST /auth/login` создают/проверяют учётную запись оқушы. Отдельных auth-flow для веба нет.
+
+| Method | Path | Body | Response |
+|--------|------|------|----------|
+| POST | `/auth/register/request-otp` | `{ "phone": "+7700..." }` | `{ "message": "otp_sent", "expires_in": 300 }` |
+| POST | `/auth/register/complete` | `{ "phone", "otp", "first_name", "last_name", "password" }` | tokens + user |
+| POST | `/auth/login` | `{ "phone", "password" }` | см. ниже |
+| POST | `/auth/refresh` | `{ "refresh_token" }` | новые tokens |
+| POST | `/auth/restore-password/request-otp` | `{ "phone" }` | ok |
+| POST | `/auth/restore-password/complete` | `{ "phone", "otp", "password" }` | ok |
+| GET | `/auth/me` | — | профиль пользователя |
+| POST | `/auth/logout` | `{ "refresh_token" }` | 204 |
+
+**Ответ login/register (ОБЯЗАТЕЛЬНО snake_case — Flutter `LoginDto`):**
+```json
+{
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "token_type": "JWT"
+}
+```
+
+**OTP:** 6 цифр, TTL 5 мин, max 5 попыток, rate limit по IP и phone.
+
+**Пароль:** bcrypt/argon2, min 8 символов.
+
+---
+
+### 5.2 Users / Profile
+
+| Method | Path | Описание |
+|--------|------|----------|
+| PATCH | `/users/me` | `{ first_name, last_name, locale, fcm_token, parent_phone, class_grade }` |
+| PUT | `/users/me/profile-subjects` | `{ "subject_1_id", "subject_2_id" }` |
+| GET | `/users/me/stats` | сводка для главной и achievement block |
+
+**GET `/users/me/stats` example:**
+```json
+{
+  "avg_score": 118,
+  "best_score": 125,
+  "last_test_score": 125,
+  "last_test_delta": 7,
+  "current_streak_days": 5,
+  "battle_wins": 12,
+  "ent_readiness_percent": 72,
+  "level": 7,
+  "has_active_test": false,
+  "daily_task": { "status": "pending", "date": "2026-05-23" }
+}
+```
+
+---
+
+### 5.3 Universities
+
+| Method | Path | Описание |
+|--------|------|----------|
+| GET | `/subjects` | список профильных предметов |
+| GET | `/universities/matches?subject_1_id=&subject_2_id=` | ЖОО + программы по паре предметов |
+| GET | `/universities` | полный список (опционально) |
+| PUT | `/users/me/target-universities` | `{ "university_ids": ["uuid", ...] }` max 3 |
+| GET | `/users/me/target-universities` | выбранные + admission_chance по avg_score |
+
+**GET matches item:**
+```json
+{
+  "university": {
+    "id": "...",
+    "name": "КазНУ ...",
+    "short_name": "КазНУ",
+    "city": "Алматы",
+    "type": "Национальный",
+    "threshold_score": 65
+  },
+  "program": {
+    "field_of_study": "Информационные технологии",
+    "required_subjects": ["Математика", "Информатика"]
+  },
+  "admission_chance": "good"
+}
+```
+
+**Расчёт `admission_chance` (как в Flutter `AdmissionChance`):**
+- `below` — avg < threshold
+- `minimal` — avg == threshold
+- `building` — threshold < avg < threshold + 20
+- `good` — threshold + 20 <= avg <= threshold + 50
+- `excellent` — avg > threshold + 50  
+
+Тексты мотивации — на клиенте; бэкенд отдаёт только `level` + числа.
+
+---
+
+### 5.4 Tests (ЕНТ / повторение / ежедневный)
+
+| Method | Path | Описание |
+|--------|------|----------|
+| GET | `/tests/templates?type=ent\|repeat\|daily` | доступные шаблоны |
+| POST | `/tests/sessions` | начать тест `{ "template_id", "type" }` |
+| GET | `/tests/sessions/{id}` | состояние + вопросы (без правильных ответов) |
+| POST | `/tests/sessions/{id}/answers` | `{ "question_id", "option_id", "time_spent_ms" }` |
+| POST | `/tests/sessions/{id}/finish` | завершить, посчитать балл |
+| POST | `/tests/sessions/{id}/heartbeat` | anti-cheat: клиент жив, не свернул приложение |
+
+**Anti-cheat (MVP на бэкенде):**
+- Сессия `in_progress` — нельзя начать вторую ЕНТ-сессию параллельно
+- Минимальное время на вопрос (напр. 3 сек) — флаг `too_fast`
+- `heartbeat` каждые 10–15 сек; >30 сек без heartbeat — `blocked`
+- Скриншот блокируется на клиенте (`FLAG_SECURE`); бэкенд фиксирует только поведенческие флаги
+- После `finish` — триггер уведомления родителю (если `parent_phone` задан)
+
+**POST finish response:**
+```json
+{
+  "session_id": "...",
+  "score": 125,
+  "correct_count": 34,
+  "total_questions": 40,
+  "duration_seconds": 2400,
+  "parent_notified": true
+}
+```
+
+---
+
+### 5.5 Repeat tests (қайталау)
+
+| Method | Path | Описание |
+|--------|------|----------|
+| GET | `/repeat-tests/daily` | тесты на сегодня/вчера (назначены через admin/teacher **веб**, оқушы только читает) |
+| GET | `/repeat-tests/history` | архив по датам |
+
+Группировка как в UI: `today[]`, `yesterday[]`.
+
+---
+
+### 5.6 Battles (баттл)
+
+| Method | Path | Описание |
+|--------|------|----------|
+| GET | `/battles/online-count` | `{ "count": 12, "classmates": [...] }` |
+| POST | `/battles/matchmaking` | `{ "subject_id" }` → создать/присоединиться |
+| GET | `/battles/{id}` | статус баттла |
+| POST | `/battles/{id}/submit` | ответы как в test session |
+| GET | `/battles/history` | история побед для stats |
+
+**Online classmates:** Redis set `online:user:{school_id}:{grade}` TTL 60s, обновляется heartbeat.
+
+---
+
+### 5.7 Progress (оқушы жетістігі)
+
+| Method | Path | Описание |
+|--------|------|----------|
+| GET | `/progress/overview` | карточки + level |
+| GET | `/progress/test-history` | **все тесты для fl_chart** |
+
+**GET `/progress/test-history`:**
+```json
+{
+  "items": [
+    {
+      "date": "2026-03-28T10:00:00Z",
+      "score": 98,
+      "type": "ent",
+      "label": "Т1"
+    }
+  ],
+  "avg_score": 112,
+  "best_score": 125
+}
+```
+
+Именно этот эндпоинт должен заменить demo-данные в `StudentTestHistoryRepository` на Flutter.
+
+---
+
+### 5.8 Notifications
+
+| Method | Path | Описание |
+|--------|------|----------|
+| GET | `/notifications` | список, пагинация |
+| PATCH | `/notifications/{id}/read` | прочитано |
+| POST | `/notifications/register-device` | `{ "fcm_token" }` |
+
+**Типы push (Celery cron):**
+- Утро: мотивация («Бүгін дайындық уақыты»)
+- Вечер: daily test не сделан
+- После ЕНТ-теста: SMS родителю «Ваш ребёнок набрал N баллов»
+
+---
+
+## 6. Бизнес-правила
+
+1. **Регистрация:** только Казахстанский номер `+7`, OTP SMS (интеграция: Mobizon / Twilio / local provider).
+2. **ЕНТ балл:** формула на MVP — `score = round(correct / total * 140)`; позже уточнить под реальную шкалу ЕНТ.
+3. **Стрик:** +1 день если за календарный день (Asia/Almaty) завершён хотя бы 1 тест (repeat или ent).
+4. **Level:** `level = 1 + total_tests // 5` (как на UI).
+5. **Топ-3 ЖОО:** ровно 3 уникальных `university_id`, иначе 400.
+6. **Баттл:** вопросы из того же `subject_id`, 10 вопросов, 5 минут — конфиг в settings.
+
+---
+
+## 7. Безопасность
+
+- HTTPS в production
+- Rate limiting: auth 10 req/min per IP, OTP 3/hour per phone
+- JWT access TTL: **15–30 min**, refresh: **30 days**
+- Refresh rotation: новый refresh при каждом refresh, старый revoke
+- CORS: только домены приложения
+- Валидация всех входов (Pydantic)
+- Не отдавать `is_correct` в вопросах до завершения сессии
+- Логирование без паролей и OTP
+- `LICENSE_EXPIRED` → 403 + `error_code` (клиент уже обрабатывает)
+
+---
+
+## 8. Формат ошибок (единый)
+
+```json
+{
+  "detail": "Неверный код OTP",
+  "error_code": "INVALID_OTP"
+}
+```
+
+| HTTP | error_code | Когда |
+|------|------------|-------|
+| 400 | VALIDATION_ERROR | невалидные поля |
+| 401 | UNAUTHORIZED | нет/просрочен token |
+| 403 | LICENSE_EXPIRED | лицензия (заглушка) |
+| 404 | NOT_FOUND | ресурс не найден |
+| 409 | TEST_ALREADY_ACTIVE | уже идёт ЕНТ-тест |
+| 429 | RATE_LIMITED | OTP / login |
+
+---
+
+## 9. Интеграция с Flutter-клиентом
+
+### Уже есть в проекте
+
+| Файл | Что сделать |
+|------|-------------|
+| `lib/src/core/api/client/endpoints.dart` | добавить новые константы путей |
+| `lib/src/features/auth/data/datasources/remote/auth_remote_impl.dart` | register, refresh, me |
+| `lib/src/features/progress/data/student_test_history_repository.dart` | GET `/progress/test-history` |
+| `lib/src/features/university/data/university_repository.dart` | GET `/universities/matches` + PUT target |
+| Hive `StorageServiceImpl` | tokens уже сохраняются |
+
+### Заголовки (обязательно)
+
+```
+Authorization: JWT <access_token>
+Accept: application/json
+Accept-Language: kk | ru
+Content-Type: application/json
+User-Agent: Android | IOS
+```
+
+### Refresh flow (уже в `dio_client.dart`)
+
+- 401 → POST `/auth/refresh` с refresh_token
+- неудача → очистить tokens, редирект на login
+
+---
+
+## 10. AI-генерация тестов — НЕ в mobile API
+
+Генерация тестов ИИ (KAHOOT-стиль) — функция **admin/teacher веб-сайта**, не мобильного приложения.
+
+Mobile API только:
+- `GET /tests/templates` — получить уже опубликованные шаблоны
+- `GET /repeat-tests/daily` — получить назначенные оқушы тесты
+
+Если нужен общий бэкенд на два клиента (mobile + web), раздели роутеры:
+- `/api/v1/student/*` — этот документ
+- `/api/v1/admin/*` — отдельная спецификация для веб-сайта
+
+---
+
+## 11. Docker Compose (локально)
+
+```yaml
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    env_file: .env
+    depends_on: [db, redis]
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: uiren
+      POSTGRES_USER: uiren
+      POSTGRES_PASSWORD: uiren
+  redis:
+    image: redis:7
+```
+
+Команды:
+```bash
+alembic upgrade head
+python -m seed.load_universities
+python -m seed.load_demo_questions
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+---
+
+## 12. Порядок разработки (этапы)
+
+### Этап 1 — MVP (2–3 недели)
+1. Docker + PostgreSQL + миграции
+2. Auth: OTP register, login, refresh, me
+3. Subjects + Universities seed + matches API
+4. Target universities (top 3)
+5. Test session: start → answers → finish + score
+6. Progress test-history + user stats
+7. Swagger docs
+
+### Этап 2 (mobile API)
+1. Daily repeat tests (чтение назначений из БД, созданных вебом)
+2. Battles matchmaking + scoring
+3. Push оқушы + SMS на `parent_phone` (без роли parent)
+4. Anti-cheat flags + heartbeat
+
+### Этап 3 (mobile API)
+1. WebSocket live battle
+2. Расширенная аналитика прогресса
+
+### Отдельно — веб-сайт (НЕ этот документ)
+- Кабинет ұстаз
+- Admin panel (вопросы, университеты, модерация)
+- AI-генерация тестов
+- Назначение repeat-тестов классу/оқушы
+
+---
+
+## 13. Тестирование бэкенда
+
+- `pytest` + `httpx.AsyncClient`
+- Фикстуры: test DB, factory users
+- Покрыть: auth flow, match universities by subjects, test scoring, streak calculation
+- CI: GitHub Actions на push
+
+---
+
+## 14. Чеклист перед подключением Flutter
+
+- [ ] `POST /auth/login` возвращает `access_token`, `refresh_token`, `token_type: "JWT"`
+- [ ] `GET /auth/me` с JWT возвращает имя оқушы
+- [ ] `GET /progress/test-history` возвращает массив для графика
+- [ ] `GET /universities/matches` фильтрует по 2 предметам
+- [ ] CORS разрешён для эмулятора/устройства
+- [ ] Base URL доступен с телефона (`0.0.0.0` → заменить на IP машины или staging URL)
+
+---
+
+## 15. Пример .env
+
+```env
+DATABASE_URL=postgresql+asyncpg://uiren:uiren@db:5432/uiren
+REDIS_URL=redis://redis:6379/0
+JWT_SECRET=change-me-long-random
+JWT_ACCESS_MINUTES=30
+JWT_REFRESH_DAYS=30
+OTP_PROVIDER=console
+SMS_API_KEY=
+FCM_CREDENTIALS_PATH=
+TIMEZONE=Asia/Almaty
+CORS_ORIGINS=*
+```
+
+---
+
+## 16. Референс: структура university_data.json
+
+```json
+{
+  "university_name": "КазНУ ...",
+  "city": "Алматы",
+  "type": "Национальный",
+  "threshold_score": 65,
+  "note": "optional",
+  "programs": [
+    {
+      "field_of_study": "Информационные технологии",
+      "required_subjects": ["Математика", "Информатика"]
+    }
+  ]
+}
+```
+
+Импортировать в БД при деплое; API читает из PostgreSQL, не из файла.
+
+---
+
+## 17. Итоговая задача для ИИ
+
+**Сгенерируй production-ready Student API для мобильного UIREN:**
+
+1. FastAPI + PostgreSQL + Redis + Alembic + Docker Compose
+2. Реализуй эндпоинты из §5 **только для оқушы** (Этап 1 + 2)
+3. **Нет** регистрации teacher/parent/admin; все `users` — ученики
+4. Seed: университеты из JSON, 50+ demo вопросов, 2–3 demo repeat-назначения (как будто созданы вебом)
+5. JWT auth совместимый с Flutter (`JWT` prefix, snake_case tokens)
+6. OpenAPI: тег `student-mobile` (опционально заготовка `/admin` без реализации)
+7. Pytest: auth student, universities match, test session, test-history
+8. README с командами запуска
+
+Не упрощай: anti-cheat, admission_chance, test-history для fl_chart, OTP, топ-3 ЖОО, SMS на parent_phone.
+
+**Не включай:** teacher cabinet, parent login, admin CRUD — это другой веб-проект.
+
+---
+
+*Документ сгенерирован по состоянию Flutter-проекта UIREN (май 2026).*

@@ -1,0 +1,81 @@
+// DO NOT EDIT. This is code generated via package:easy_localization/generate.dart
+
+// ignore_for_file: constant_identifier_names
+
+abstract class  LocaleKeys {
+  static const log_in = 'log_in';
+  static const phone_label = 'phone_label';
+  static const password_label = 'password_label';
+  static const register = 'register';
+  static const register_title = 'register_title';
+  static const first_name = 'first_name';
+  static const last_name = 'last_name';
+  static const otp_send = 'otp_send';
+  static const register_btn = 'register_btn';
+  static const have_account = 'have_account';
+  static const no_account = 'no_account';
+  static const home_greeting = 'home_greeting';
+  static const home_subtitle = 'home_subtitle';
+  static const start_test = 'start_test';
+  static const continue_test = 'continue_test';
+  static const quick_repeat = 'quick_repeat';
+  static const quick_battle = 'quick_battle';
+  static const quick_progress = 'quick_progress';
+  static const battle_title = 'battle_title';
+  static const battle_subtitle = 'battle_subtitle';
+  static const find_opponent = 'find_opponent';
+  static const online_now = 'online_now';
+  static const streak_label = 'streak_label';
+  static const avg_score = 'avg_score';
+  static const last_test = 'last_test';
+  static const stat_streak = 'stat_streak';
+  static const universities_title = 'universities_title';
+  static const university_close = 'university_close';
+  static const university_select = 'university_select';
+  static const university_select_title = 'university_select_title';
+  static const university_step_subjects = 'university_step_subjects';
+  static const university_step_results = 'university_step_results';
+  static const university_subject_1 = 'university_subject_1';
+  static const university_subject_2 = 'university_subject_2';
+  static const university_find = 'university_find';
+  static const university_pick_hint = 'university_pick_hint';
+  static const university_change_subjects = 'university_change_subjects';
+  static const university_no_results = 'university_no_results';
+  static const university_save = 'university_save';
+  static const university_threshold = 'university_threshold';
+  static const university_subjects_label = 'university_subjects_label';
+  static const university_empty_hint = 'university_empty_hint';
+  static const university_your_avg = 'university_your_avg';
+  static const chance_below = 'chance_below';
+  static const chance_minimal = 'chance_minimal';
+  static const chance_building = 'chance_building';
+  static const chance_good = 'chance_good';
+  static const chance_excellent = 'chance_excellent';
+  static const daily_task_title = 'daily_task_title';
+  static const daily_task_done = 'daily_task_done';
+  static const daily_task_pending = 'daily_task_pending';
+  static const battle_page_title = 'battle_page_title';
+  static const progress_page_title = 'progress_page_title';
+  static const repeat_page_title = 'repeat_page_title';
+  static const test_page_title = 'test_page_title';
+  static const test_rules = 'test_rules';
+  static const start_now = 'start_now';
+  static const back = 'back';
+  static const achievement_title = 'achievement_title';
+  static const achievement_level = 'achievement_level';
+  static const achievement_ent_ready = 'achievement_ent_ready';
+  static const achievement_motivation = 'achievement_motivation';
+  static const achievement_view_stats = 'achievement_view_stats';
+  static const achievement_badge_wins = 'achievement_badge_wins';
+  static const progress_chart_title = 'progress_chart_title';
+  static const progress_chart_subtitle = 'progress_chart_subtitle';
+  static const progress_chart_avg = 'progress_chart_avg';
+  static const progress_chart_best = 'progress_chart_best';
+  static const progress_best_title = 'progress_best_title';
+  static const progress_chart_empty = 'progress_chart_empty';
+  static const progress_all_tests = 'progress_all_tests';
+  static const progress_vs_prev = 'progress_vs_prev';
+  static const progress_ent_goal = 'progress_ent_goal';
+  static const progress_ent_percent = 'progress_ent_percent';
+
+}
