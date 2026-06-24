@@ -38,7 +38,12 @@ abstract class  LocaleKeys {
   static const register_btn = 'register_btn';
   static const have_account = 'have_account';
   static const no_account = 'no_account';
-  static const home_greeting = 'home_greeting';
+  static const nav_home = 'nav_home';
+  static const nav_repeat = 'nav_repeat';
+  static const nav_rating = 'nav_rating';
+  static const nav_battle = 'nav_battle';
+  static const nav_profile = 'nav_profile';
+  static const logout = 'logout';
   static const home_subtitle = 'home_subtitle';
   static const start_test = 'start_test';
   static const continue_test = 'continue_test';
