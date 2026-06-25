@@ -2,6 +2,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:uiren/src/core/service/injectable/injectable_service.dart';
 import 'package:uiren/src/core/service/storage/storage_service_impl.dart';
+import 'package:uiren/src/core/utils/firebase_utils.dart';
 import 'package:uiren/src/core/utils/loggers/logger.dart';
 import 'package:flutter/material.dart';
 // import 'package:flutter/services.dart';
@@ -14,6 +15,7 @@ class Runner {
   }) async {
     FlutterError.onError = Log.logFlutterError;
     WidgetsFlutterBinding.ensureInitialized();
+    await FirebaseUtil().initialize();
     if (Firebase.apps.isEmpty) {
       try {
         await Firebase.initializeApp();
@@ -21,7 +23,7 @@ class Runner {
         Log.e('Firebase init skipped: $e', stackTrace: st);
       }
     }
-    
+
     await StorageServiceImpl().init();
     await configureDependencies();
 

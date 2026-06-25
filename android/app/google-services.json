@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "389813741089",
+    "project_id": "uiren-33b03",
+    "storage_bucket": "uiren-33b03.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:389813741089:android:c8eb9c8cbf11355a876560",
+        "android_client_info": {
+          "package_name": "com.example.uiren"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUJjEb9XYT9YAU1ntys7F3TYk-zngoCUw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

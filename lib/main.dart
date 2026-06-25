@@ -19,7 +19,7 @@ Future<void> main(List<String> args) async {
           flavor: AppFlavor.development,
           args: args,
         );
-      },  
+      },
       Log.logZoneError,
     );
   });
