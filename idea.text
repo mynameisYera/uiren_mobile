@@ -1,362 +1,259 @@
-Auth API — спецификация для фронтенда / Frontend spec
+Home & Courses API — для фронтенда / for frontend
 Общее / General
 Параметр	Значение
-Base URL (local)
+Production
 https://uiren-backend.onrender.com/api
+Local
+http://0.0.0.0:8000/api
 Content-Type
 application/json
-Accept-Language
-опционально: kk или ru
+Auth
+обязательна на обеих ручках
 Swagger
-http://0.0.0.0:8000/docs
-Формат авторизации после регистрации/логина:
+https://uiren-backend.onrender.com/docs
+Заголовок авторизации:
 
 Authorization: JWT <access_token>
-⚠️ Префикс именно JWT, не Bearer.
+⚠️ Префикс JWT, не Bearer.
 
 Формат ошибок:
 
 {
   "detail": "Текст ошибки",
-  "error_code": "VALIDATION_ERROR"
+  "error_code": "NOT_FOUND"
 }
-При ошибке валидации Pydantic (400):
+Flow на фронте / Frontend flow
+1. Логин / регистрация → сохранить access_token
+2. GET /api/home → главный экран (список курсов + roadmap)
+3. Тап на курс → GET /api/courses/{id} → детали курса
+4. Тап на урок → video_url + 3 test id для тестов
+1. Главный экран / Home screen
+GET /api/home
+Authorization: JWT <access_token>
+Назначение: вернуть все курсы пользователя и полный roadmap (дерево курсов → главы → уроки).
 
-{
-  "detail": "Ошибка валидации",
-  "error_code": "VALIDATION_ERROR",
-  "errors": [ ... ]
-}
-Flow регистрации (3 экрана) / Registration flow (3 screens)
-Экран 1: Ввод телефона
-    → POST /auth/register/request-otp
-Экран 2: Ввод OTP
-    → POST /auth/register/verify-otp
-Экран 3: Имя, Фамилия, Пароль
-    → POST /auth/register/complete
-    → получаете access_token + refresh_token
-    → сохраняете токены, переходите в приложение
-Важно для фронта:
+Request body: нет
 
-На всех 3 шагах передавайте один и тот же phone (можно с +, пробелами, скобками — бэкенд нормализует).
-Шаг 3 нельзя вызвать без успешного шага 2.
-OTP в dev/test всегда 0000.
-OTP живёт 300 секунд (5 мин) с момента request-otp.
-Максимум 5 попыток ввода OTP, потом нужен новый request-otp.
-Повторный request-otp сбрасывает верификацию — после этого снова нужен verify-otp.
-1. Запрос OTP / Request OTP
-Шаг 1 — экран ввода телефона
-
-POST /api/auth/register/request-otp
-Content-Type: application/json
-Request body:
-
-{
-  "phone": "+77001234567"
-}
-Поле	Тип	Обязательно	Описание
-phone
-string
-✅
-Номер телефона. Примеры: +77001234567, 8 700 123 45 67, 77001234567
-Нормализация телефона на бэке:
-
-Убираются все нецифровые символы
-8XXXXXXXXXX (11 цифр) → 7XXXXXXXXXX
-Итог хранится как цифры без +, напр. 77001234567
 Success 200:
 
 {
-  "message": "otp_sent",
-  "expires_in": 300
+  "has_courses": true,
+  "current_course_id": 1,
+  "courses": [
+    { "id": 1, "name": "Course 1" },
+    { "id": 2, "name": "Course 2" }
+  ],
+  "roadmap": [
+    {
+      "id": 1,
+      "name": "Course 1",
+      "chapters": [
+        {
+          "id": 1,
+          "name": "Chapter 1",
+          "lessons": [
+            {
+              "id": 1,
+              "name": "Lesson 1",
+              "topic": "Topic 1",
+              "video_url": "https://via.placeholder.com/150",
+              "first_test_id": 1,
+              "second_test_id": 2,
+              "third_test_id": 3
+            },
+            {
+              "id": 2,
+              "name": "Lesson 2",
+              "topic": "Topic 2",
+              "video_url": "https://via.placeholder.com/150",
+              "first_test_id": 4,
+              "second_test_id": 5,
+              "third_test_id": 6
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "name": "Chapter 2",
+          "lessons": [
+            {
+              "id": 3,
+              "name": "Lesson 3",
+              "topic": "Topic 3",
+              "video_url": "https://via.placeholder.com/150",
+              "first_test_id": 7,
+              "second_test_id": 8,
+              "third_test_id": 9
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
-Поле	Описание
-message
-Всегда "otp_sent"
-expires_in
-Секунды до истечения OTP (300)
+Поля ответа / Response fields
+Поле	Тип	Описание
+has_courses
+bool
+Есть ли у юзера курсы
+current_course_id
+int | null
+ID текущего/первого курса (для UI)
+courses
+array
+Краткий список курсов (табы, селектор)
+courses[].id
+int
+ID курса → для GET /courses/{id}
+courses[].name
+string
+Название курса
+roadmap
+array
+Полное дерево курсов с главами и уроками
+roadmap[].chapters
+array
+Главы курса
+roadmap[].chapters[].lessons
+array
+Уроки главы
+lessons[].topic
+string
+Тема урока
+lessons[].video_url
+string
+URL видео
+lessons[].first_test_id
+int
+ID 1-го теста
+lessons[].second_test_id
+int
+ID 2-го теста
+lessons[].third_test_id
+int
+ID 3-го теста
+Если курсов нет:
+
+{
+  "has_courses": false,
+  "current_course_id": null,
+  "courses": [],
+  "roadmap": []
+}
 Ошибки:
 
-HTTP	error_code	detail	Когда
-400
-VALIDATION_ERROR
-Пустой номер телефона / Некорректная длина номера
-Невалидный phone
-409
-CONFLICT
-Пользователь с этим номером уже зарегистрирован
-Номер уже есть в системе
-429
-RATE_LIMITED
-Слишком много запросов OTP
->3 запросов OTP на номер в час
-cURL:
-
-curl -X POST https://uiren-backend.onrender.com/api/auth/register/request-otp \
-  -H "Content-Type: application/json" \
-  -d '{"phone": "+77001234567"}'
-2. Подтверждение OTP / Verify OTP
-Шаг 2 — экран ввода кода
-
-POST /api/auth/register/verify-otp
-Content-Type: application/json
-Request body:
-
-{
-  "phone": "+77001234567",
-  "otp": "0000"
-}
-Поле	Тип	Обязательно	Валидация	Описание
-phone
-string
-✅
-—
-Тот же номер, что на шаге 1
-otp
-string
-✅
-min 4, max 10 символов
-Код из WhatsApp. В dev: 0000
-Success 200:
-
-{
-  "message": "phone_verified",
-  "detail": null
-}
-Ошибки:
-
-HTTP	error_code	detail	Когда
-400
-VALIDATION_ERROR
-Сначала запросите OTP
-Не было request-otp
-400
-VALIDATION_ERROR
-Код истёк, запросите новый
-Прошло >5 мин
-400
-VALIDATION_ERROR
-Превышено число попыток, запросите новый код
-5 неверных попыток
-400
-VALIDATION_ERROR
-Неверный код
-OTP не совпал
-cURL:
-
-curl -X POST https://uiren-backend.onrender.com/api/auth/register/verify-otp \
-  -H "Content-Type: application/json" \
-  -d '{"phone": "+77001234567", "otp": "0000"}'
-3. Завершение регистрации / Complete registration
-Шаг 3 — экран: Имя, Фамилия, Пароль
-
-POST /api/auth/register/complete
-Content-Type: application/json
-Request body:
-
-{
-  "phone": "+77001234567",
-  "first_name": "Али",
-  "last_name": "Нурланов",
-  "password": "password123",
-  "group": ""
-}
-Поле	Тип	Обязательно	Валидация	Описание
-phone
-string
-✅
-—
-Тот же номер
-first_name
-string
-✅
-1–100 символов
-Имя
-last_name
-string
-✅
-1–100 символов
-Фамилия
-password
-string
-✅
-min 8, max 128
-Пароль
-group
-string
-❌
-max 100, default ""
-Класс/группа (опционально)
-Success 200:
-
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIs...",
-  "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
-  "token_type": "JWT"
-}
-Поле	Описание
-access_token
-JWT, живёт 30 минут
-refresh_token
-JWT, живёт 30 дней
-token_type
-Всегда "JWT"
-Что делать фронту после успеха:
-
-Сохранить access_token и refresh_token (secure storage)
-Все защищённые запросы: Authorization: JWT {access_token}
-При 401 — попробовать refresh (см. ниже)
-Ошибки:
-
-HTTP	error_code	detail	Когда
-400
-VALIDATION_ERROR
-Сначала подтвердите номер телефона
-Не вызывали verify-otp
-400
-VALIDATION_ERROR
-Сессия регистрации истекла, начните заново
-Истёк TTL (5 мин с request-otp)
-400
-VALIDATION_ERROR
-поля не прошли валидацию
-Короткий пароль, пустое имя и т.д.
-409
-CONFLICT
-Пользователь с этим номером уже зарегистрирован
-Race condition / повторная регистрация
-cURL:
-
-curl -X POST https://uiren-backend.onrender.com/api/auth/register/complete \
-  -H "Content-Type: application/json" \
-  -d '{
-    "phone": "+77001234567",
-    "first_name": "Али",
-    "last_name": "Нурланов",
-    "password": "password123"
-  }'
-Полный пример flow (copy-paste для фронта)
-const BASE = "https://uiren-backend.onrender.com/api";
-const phone = "+77001234567";
-// Step 1
-await fetch(`${BASE}/auth/register/request-otp`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ phone }),
-});
-// Step 2
-await fetch(`${BASE}/auth/register/verify-otp`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ phone, otp: "0000" }),
-});
-// Step 3
-const res = await fetch(`${BASE}/auth/register/complete`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    phone,
-    first_name: "Али",
-    last_name: "Нурланов",
-    password: "password123",
-  }),
-});
-const { access_token, refresh_token, token_type } = await res.json();
-// save tokens → navigate to home
-Связанные ручки (после регистрации) / Related endpoints
-Логин (если пользователь уже есть)
-POST /api/auth/login
-{ "phone": "+77001234567", "password": "password123" }
-→ тот же TokenResponse что и у register/complete
-
-HTTP	error_code	detail
+HTTP	error_code	Когда
 401
 UNAUTHORIZED
-Неверный телефон или пароль
-429
-RATE_LIMITED
-Слишком много запросов (>10/мин с IP)
-Профиль текущего пользователя
-GET /api/auth/me
+Нет токена / истёк / невалидный
+403
+LICENSE_EXPIRED
+Лицензия истекла (редко)
+cURL:
+
+curl https://uiren-backend.onrender.com/api/home \
+  -H "Authorization: JWT eyJhbGciOi..."
+2. Один курс по ID / Single course
+GET /api/courses/{course_id}
 Authorization: JWT <access_token>
+Назначение: детали одного курса — главы и уроки. Вызывать по courses[].id из /home.
+
+Path params:
+
+Параметр	Тип	Пример
+course_id
+int
+1
 Success 200:
 
 {
   "id": 1,
-  "phone": "77001234567",
-  "first_name": "Али",
-  "last_name": "Нурланов",
-  "group": "",
-  "class_grade": null,
-  "class_letter": null,
-  "locale": "kk",
-  "avatar_url": null,
-  "parent_phone": null
+  "name": "Course 1",
+  "chapters": [
+    {
+      "id": 1,
+      "name": "Chapter 1",
+      "lessons": [
+        {
+          "id": 1,
+          "name": "Lesson 1",
+          "topic": "Topic 1",
+          "video_url": "https://via.placeholder.com/150",
+          "first_test_id": 1,
+          "second_test_id": 2,
+          "third_test_id": 3
+        }
+      ]
+    }
+  ]
 }
-Поле в JSON — "group", не group_name.
+Структура chapters / lessons — та же, что в roadmap[] у /home.
 
-Обновление токена
-POST /api/auth/refresh
-{ "refresh_token": "<refresh_token>" }
-→ новая пара access_token + refresh_token (старый refresh инвалидируется)
+Ошибки:
 
-Выход
-POST /api/auth/logout
-{ "refresh_token": "<refresh_token>" }
-→ 204 No Content, тело пустое
+HTTP	error_code	detail	Когда
+401
+UNAUTHORIZED
+—
+Нет / невалидный токен
+404
+NOT_FOUND
+Курс не найден
+Курс не существует или недоступен
+cURL:
 
-Сводная таблица всех auth-ручек / All auth endpoints
-#	Method	Path	Auth	Назначение
-1
-POST
-/api/auth/register/request-otp
-❌
-Отправить OTP на телефон
-2
-POST
-/api/auth/register/verify-otp
-❌
-Подтвердить OTP
-3
-POST
-/api/auth/register/complete
-❌
-Имя + пароль → токены
-4
-POST
-/api/auth/login
-❌
-Логин по телефону + паролю
-5
+curl https://uiren-backend.onrender.com/api/courses/1 \
+  -H "Authorization: JWT eyJhbGciOi..."
+Иерархия данных / Data hierarchy
+Course (курс)
+  └── Chapter (глава)        ← chapters[]
+        └── Lesson (урок)    ← lessons[]
+              ├── video_url
+              ├── first_test_id
+              ├── second_test_id
+              └── third_test_id
+UI экран	Откуда брать данные
+Список курсов
+GET /home → courses[]
+Roadmap / карта обучения
+GET /home → roadmap[]
+Страница курса
+GET /courses/{id}
+Видео урока
+lesson.video_url
+Тест 1 / 2 / 3
+first_test_id, second_test_id, third_test_id
+Пример на Flutter/Dart
+const baseUrl = 'https://uiren-backend.onrender.com/api';
+// Home
+final homeRes = await dio.get(
+  '$baseUrl/home',
+  options: Options(headers: {'Authorization': 'JWT $accessToken'}),
+);
+final hasCourses = homeRes.data['has_courses'];
+final courses = homeRes.data['courses'] as List;
+final roadmap = homeRes.data['roadmap'] as List;
+// Course detail
+final courseId = courses[0]['id'];
+final courseRes = await dio.get(
+  '$baseUrl/courses/$courseId',
+  options: Options(headers: {'Authorization': 'JWT $accessToken'}),
+);
+final chapters = courseRes.data['chapters'] as List;
+Важно для фронта / Frontend notes
+Auth обязателен — сначала логин/регистрация, потом /home.
+current_course_id — какой курс показывать по умолчанию (сейчас первый в списке).
+Course 2 в demo есть в courses[], но без глав — chapters: [].
+3 теста на урок — id приходят с бэка; ручки прохождения тестов пока отдельно не реализованы.
+/home vs /courses/{id} — /home отдаёт всё сразу; /courses/{id} — один курс (удобно при deep link или lazy load).
+Сводка / Summary
+Method	Path	Auth	Описание
 GET
-/api/auth/me
+/api/home
 ✅ JWT
-Профиль пользователя
-6
-POST
-/api/auth/refresh
-❌
-Обновить access token
-7
-POST
-/api/auth/logout
-❌
-Выйти (revoke refresh)
-UI-подсказки для фронта / UI hints
-Экран	Кнопка «Повторить код»	Действие
-OTP
-Resend
-снова POST /register/request-otp (сбросит verify)
-OTP
-Таймер
-показывать expires_in (300 сек)
-Пароль
-Валидация
-min 8 символов до отправки
-Ошибка 409 на шаге 1
-—
-«Номер уже зарегистрирован» → экран логина
-Ошибка 400 «Сессия истекла»
-—
-вернуть на экран 1
-Dev OTP: всегда 0000 (пока не уберут OTP_STATIC_CODE на бэке).
+Главный экран: курсы + roadmap
+GET
+/api/courses/{course_id}
+✅ JWT
+Один курс: chapters + lessons
+Можешь переслать фронтендеру целиком.

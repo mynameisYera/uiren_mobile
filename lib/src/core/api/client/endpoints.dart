@@ -19,5 +19,7 @@ class EndPoints {
   // Profile
   static const String profile = '/auth/me';
 
-  
+  // Home & courses
+  static const String home = '/home';
+  static String course(int courseId) => '/courses/$courseId';
 }

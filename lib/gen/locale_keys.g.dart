@@ -44,6 +44,13 @@ abstract class  LocaleKeys {
   static const nav_battle = 'nav_battle';
   static const nav_profile = 'nav_profile';
   static const logout = 'logout';
+  static const home_no_courses = 'home_no_courses';
+  static const home_no_chapters = 'home_no_chapters';
+  static const home_retry = 'home_retry';
+  static const home_my_subjects = 'home_my_subjects';
+  static const home_current_subject = 'home_current_subject';
+  static const home_start_journey = 'home_start_journey';
+  static const home_continue_lesson = 'home_continue_lesson';
   static const home_subtitle = 'home_subtitle';
   static const start_test = 'start_test';
   static const continue_test = 'continue_test';

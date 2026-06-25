@@ -27,6 +27,15 @@ import '../../../features/auth/domain/usecases/request_otp_usecase.dart'
     as _i804;
 import '../../../features/auth/domain/usecases/verify_otp_usecase.dart'
     as _i553;
+import '../../../features/home/data/datasources/remote/home_remote_impl.dart'
+    as _i937;
+import '../../../features/home/data/datasources/remote/i_home_remote.dart'
+    as _i202;
+import '../../../features/home/data/repositories/home_repository_impl.dart'
+    as _i955;
+import '../../../features/home/domain/repository/i_home_repository.dart'
+    as _i445;
+import '../../../features/home/domain/usecases/get_home_usecase.dart' as _i885;
 import '../../utils/picker/file_picker.dart' as _i716;
 
 extension GetItInjectableX on _i174.GetIt {
@@ -41,11 +50,21 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i292.AuthRemoteImpl(),
       instanceName: 'AuthRemoteImpl',
     );
+    gh.lazySingleton<_i202.IHomeRemote>(
+      () => _i937.HomeRemoteImpl(),
+      instanceName: 'HomeRemoteImpl',
+    );
     gh.lazySingleton<_i1024.IAuthRepo>(
       () => _i365.AuthRepoImpl(
         gh<_i631.IAuthRemote>(instanceName: 'AuthRemoteImpl'),
       ),
       instanceName: 'AuthRepoImpl',
+    );
+    gh.lazySingleton<_i445.IHomeRepo>(
+      () => _i955.HomeRepoImpl(
+        gh<_i202.IHomeRemote>(instanceName: 'HomeRemoteImpl'),
+      ),
+      instanceName: 'HomeRepoImpl',
     );
     gh.lazySingleton<_i849.LoginUseCase>(
       () => _i849.LoginUseCase(
@@ -65,6 +84,11 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i553.VerifyOtpUseCase>(
       () => _i553.VerifyOtpUseCase(
         gh<_i1024.IAuthRepo>(instanceName: 'AuthRepoImpl'),
+      ),
+    );
+    gh.lazySingleton<_i885.GetHomeUseCase>(
+      () => _i885.GetHomeUseCase(
+        gh<_i445.IHomeRepo>(instanceName: 'HomeRepoImpl'),
       ),
     );
     return this;

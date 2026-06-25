@@ -6,6 +6,8 @@ import 'package:uiren/src/features/auth/domain/usecases/request_otp_usecase.dart
 import 'package:uiren/src/features/auth/domain/usecases/verify_otp_usecase.dart';
 import 'package:uiren/src/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:uiren/src/features/auth/presentation/bloc/register/register_bloc.dart';
+import 'package:uiren/src/features/home/domain/usecases/get_home_usecase.dart';
+import 'package:uiren/src/features/home/presentation/bloc/home_bloc.dart';
 
 void manualRegisterServices() {
   if (!getIt.isRegistered<AuthBloc>()) {
@@ -21,6 +23,12 @@ void manualRegisterServices() {
         getIt<VerifyOtpUseCase>(),
         getIt<CompleteRegistrationUseCase>(),
       ),
+    );
+  }
+
+  if (!getIt.isRegistered<HomeBloc>()) {
+    getIt.registerBloc<HomeBloc>(
+      () => HomeBloc(getIt<GetHomeUseCase>()),
     );
   }
 }
